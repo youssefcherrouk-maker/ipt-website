@@ -51,6 +51,7 @@ app.use(helmet({
 const ALLOWED_ORIGINS = [
   'https://iptvpremium01.vercel.app',
   'https://iptv-api-proxy.youssefcherrouk.workers.dev',
+  'http://localhost:3000',
 ];
 
 app.use(cors({

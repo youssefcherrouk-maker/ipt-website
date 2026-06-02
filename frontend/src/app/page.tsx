@@ -23,7 +23,7 @@ const SPORTS = [
 export default function Home() {
   const { t } = useLanguage();
   const heroRef = useRef<HTMLDivElement>(null);
-  const [selectedMovie, setSelectedMovie] = useState<MediaItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -94,7 +94,7 @@ export default function Home() {
           </div>
           <div className="content-grid">
             {FEATURED.map((item, i) => (
-              <div key={i} onClick={() => setSelectedMovie(item)} className="content-card group cursor-pointer" style={{ animationDelay: `${i * 100}ms` }}>
+              <div key={i} onClick={() => setSelectedItem(item)} className="content-card group cursor-pointer" style={{ animationDelay: `${i * 100}ms` }}>
                 <div className="aspect-[2/3] rounded-xl overflow-hidden bg-white/5">
                   <img src={item.img} alt={item.title} loading="lazy" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" onError={(e) => { const img = e.target as HTMLImageElement; img.style.display = 'none'; img.parentElement?.classList.add('bg-gradient-to-br', 'from-purple-900/40', 'to-pink-900/40'); }} />
                   <div className="card-overlay" />
@@ -125,7 +125,7 @@ export default function Home() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {SPORTS.map((item, i) => (
-              <Link href="/sports" key={i} className="content-card group cursor-pointer">
+              <div key={i} onClick={() => setSelectedItem(item)} className="content-card group cursor-pointer">
                 <div className="aspect-[16/9] rounded-xl overflow-hidden bg-white/5">
                   <img src={item.img} alt={item.title} loading="lazy" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" onError={(e) => { const img = e.target as HTMLImageElement; img.style.display = 'none'; img.parentElement?.classList.add('bg-gradient-to-br', 'from-red-900/40', 'to-orange-900/40'); }} />
                   <div className="card-overlay" />
@@ -140,7 +140,7 @@ export default function Home() {
                     <p className="text-white font-bold text-base">{item.match}</p>
                   </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </div>
@@ -180,8 +180,8 @@ export default function Home() {
         </div>
       </section>
 
-      {selectedMovie && (
-        <ContentDetail item={selectedMovie} type="movie" onClose={() => setSelectedMovie(null)} />
+      {selectedItem && (
+        <ContentDetail item={selectedItem} type={selectedItem.match ? 'movie' : 'movie'} onClose={() => setSelectedItem(null)} />
       )}
     </div>
   );

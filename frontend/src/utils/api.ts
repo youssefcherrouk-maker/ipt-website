@@ -1,5 +1,5 @@
 // API calls are proxied through Cloudflare Worker to avoid exposing Vercel bypass token
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 const BYPASS_PARAM = '';
 
 interface ApiResponse<T = unknown> {
