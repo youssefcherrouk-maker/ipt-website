@@ -1,5 +1,8 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
+import ContentDetail from '@/components/ContentDetail';
+import type { MediaItem } from '@/components/ContentDetail';
 
 const MATCHES = [
   { league: 'UEFA Champions League', match: 'Real Madrid vs Manchester City', time: 'LIVE', viewers: '124K', img: 'https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=800&q=80' },
@@ -22,6 +25,17 @@ const CHANNELS = [
 ];
 
 export default function SportsPage() {
+  const [selectedMatch, setSelectedMatch] = useState<MediaItem | null>(null);
+
+  const toMediaItem = (m: typeof MATCHES[0]): MediaItem => ({
+    title: m.league,
+    match: m.match,
+    tag: m.time === 'LIVE' ? 'LIVE' : 'UPCOMING',
+    viewers: m.viewers,
+    img: m.img,
+    rating: m.time === 'LIVE' ? 'LIVE' : '',
+    description: `Watch ${m.match} ${m.time === 'LIVE' ? 'live now' : 'on ' + m.time} in stunning 4K quality. Every goal, every tackle, every moment.`,
+  });
   return (
     <div className="bg-black pt-20">
       {/* Stadium Hero */}
@@ -52,7 +66,7 @@ export default function SportsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {MATCHES.map((m, i) => (
-              <div key={i} className="content-card group cursor-pointer">
+              <div key={i} onClick={() => setSelectedMatch(toMediaItem(m))} className="content-card group cursor-pointer">
                 <div className="aspect-[16/9] rounded-xl overflow-hidden bg-white/5">
                   <img src={m.img} alt={m.match} loading="lazy" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" onError={(e) => { const img = e.target as HTMLImageElement; img.style.display = 'none'; img.parentElement?.classList.add('bg-gradient-to-br', 'from-red-900/40', 'to-orange-900/40'); }} />
                   <div className="card-overlay" />
@@ -116,6 +130,10 @@ export default function SportsPage() {
           <Link href="/pricing" className="btn-gold px-8 py-3">View Plans</Link>
         </div>
       </section>
+
+      {selectedMatch && (
+        <ContentDetail item={selectedMatch} type="movie" onClose={() => setSelectedMatch(null)} />
+      )}
     </div>
   );
 }
