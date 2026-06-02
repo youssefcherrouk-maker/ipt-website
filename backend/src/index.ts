@@ -16,8 +16,8 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 async function main() {
   // Database connection
-  const dbHost = process.env.DB_HOST || 'localhost';
-  const isRemote = dbHost !== 'localhost';
+  const dbHost = process.env.DB_HOST;
+  const isRemote = dbHost !== undefined && dbHost !== 'localhost';
   const pool = new Pool({
     host: dbHost,
     port: parseInt(process.env.DB_PORT || '5432', 10),
@@ -49,7 +49,7 @@ async function main() {
   app.use(helmet({
     contentSecurityPolicy: NODE_ENV === 'production' ? undefined : false,
   }));
-  const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  const corsOrigins = (process.env.CORS_ORIGIN || '')
     .split(',')
     .map(s => s.trim());
   app.use(cors({
@@ -76,7 +76,7 @@ async function main() {
   const server = app.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}`, {
       environment: NODE_ENV,
-      url: `http://localhost:${PORT}`,
+      url: `port:${PORT}`,
     });
   });
 

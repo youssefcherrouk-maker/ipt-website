@@ -1,7 +1,9 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/i18n/LanguageContext';
+import ContentDetail from '@/components/ContentDetail';
+import type { MediaItem } from '@/components/ContentDetail';
 
 const FEATURED = [
   { title: 'Interstellar', genre: 'Sci-Fi', year: '2014', rating: '9.3', img: 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=500&q=80' },
@@ -21,6 +23,7 @@ const SPORTS = [
 export default function Home() {
   const { t } = useLanguage();
   const heroRef = useRef<HTMLDivElement>(null);
+  const [selectedMovie, setSelectedMovie] = useState<MediaItem | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -91,7 +94,7 @@ export default function Home() {
           </div>
           <div className="content-grid">
             {FEATURED.map((item, i) => (
-              <Link href="/movies" key={i} className="content-card group cursor-pointer" style={{ animationDelay: `${i * 100}ms` }}>
+              <div key={i} onClick={() => setSelectedMovie(item)} className="content-card group cursor-pointer" style={{ animationDelay: `${i * 100}ms` }}>
                 <div className="aspect-[2/3] rounded-xl overflow-hidden bg-white/5">
                   <img src={item.img} alt={item.title} loading="lazy" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" onError={(e) => { const img = e.target as HTMLImageElement; img.style.display = 'none'; img.parentElement?.classList.add('bg-gradient-to-br', 'from-purple-900/40', 'to-pink-900/40'); }} />
                   <div className="card-overlay" />
@@ -103,7 +106,7 @@ export default function Home() {
                     <p className="text-white/50 text-xs mt-1">{item.genre} · {item.year}</p>
                   </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </div>
@@ -176,6 +179,10 @@ export default function Home() {
           </Link>
         </div>
       </section>
+
+      {selectedMovie && (
+        <ContentDetail item={selectedMovie} type="movie" onClose={() => setSelectedMovie(null)} />
+      )}
     </div>
   );
 }
