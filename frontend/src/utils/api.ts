@@ -1,9 +1,6 @@
-// Vercel Hobby deployment protection requires a bypass token for *.vercel.app domains.
-// This token is inlined at build time so API calls from the browser work.
-// To fully remove this from client JS, upgrade to Vercel Pro ($20/mo) or use a custom domain.
+// API calls are proxied through Cloudflare Worker to avoid exposing Vercel bypass token
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-const BYPASS_TOKEN = process.env.NEXT_PUBLIC_VERCEL_BYPASS || '';
-const BYPASS_PARAM = BYPASS_TOKEN ? `?x-vercel-protection-bypass=${BYPASS_TOKEN}` : '';
+const BYPASS_PARAM = '';
 
 interface ApiResponse<T = unknown> {
   success: boolean;
