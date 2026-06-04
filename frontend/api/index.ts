@@ -123,10 +123,7 @@ const blacklistedTokens = new Set();
 // Supabase Database Client
 // ============================================================
 const supabaseUrl = process.env.SUPABASE_URL || 'https://bvbwaicdcshvwefhwbmd.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
-if (!supabaseKey) {
-  console.error('SUPABASE_SERVICE_KEY environment variable is not set');
-}
+const supabaseKey = process.env.SUPABASE_KEY || 'sb_publishable_8UsaBRe6WUDKgd-vbf-TGA_U2F4xrw1';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function requireAdmin(req, res, next) {
