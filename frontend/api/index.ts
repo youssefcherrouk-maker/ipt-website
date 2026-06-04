@@ -4,27 +4,15 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+
 const { createClient } = require('@supabase/supabase-js');
 
-// ============================================================
-// Environment validation — crash immediately if secrets missing
-// ============================================================
-function requiredEnv(name) {
-  const val = process.env[name];
-  if (!val) throw new Error(`Missing required environment variable: ${name}`);
-  return val;
-}
-
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://hvyeenfqnwasepeiwvbh.supabase.co';
-const SUPABASE_SECRET_KEY = requiredEnv('SUPABASE_SECRET_KEY');
-const JWT_SECRET = requiredEnv('JWT_SECRET');
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY);
+const JWT_SECRET = process.env.JWT_SECRET || 'iptv-admin-secret-key-change-in-production';
 
 const app = express();
 
 // ============================================================
-// Security Headers (CSP enabled properly)
+// Security Headers
 // ============================================================
 app.use(helmet({
   contentSecurityPolicy: {
@@ -33,7 +21,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://www.paypal.com", "https://www.paypalobjects.com", "https://www.paypal.sandbox.com"],
       frameSrc: ["https://www.paypal.com", "https://www.paypalobjects.com", "https://www.paypal.sandbox.com"],
-      connectSrc: ["'self'", "https://api-m.paypal.com", "https://api-m.paypal.sandbox.com", SUPABASE_URL],
+      connectSrc: ["'self'", "https://api-m.paypal.com", "https://api-m.paypal.sandbox.com"],
       imgSrc: ["'self'", "data:", "https://www.paypalobjects.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
@@ -46,13 +34,13 @@ app.use(helmet({
 }));
 
 // ============================================================
-// CORS — strict origin restriction
+// CORS
 // ============================================================
 const ALLOWED_ORIGINS = [
   'https://iptvpremium01.vercel.app',
   'https://iptv-api-proxy.youssefcherrouk.workers.dev',
   'https://iptvpro-eight.vercel.app',
-  'https://iptvpro-j1grgjcdw-luizerferly-3716s-projects.vercel.app',
+  'https://iptvpro-b1ra9gn2m-luizerferly-3716s-projects.vercel.app',
   'http://localhost:3000',
 ];
 
@@ -114,8 +102,33 @@ function verifyToken(token) {
 }
 
 // ============================================================
+// Helpers: Transform snake_case DB rows to camelCase for frontend
+// ============================================================
+function snakeToCamel(obj) {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(snakeToCamel);
+  return Object.keys(obj).reduce((acc, key) => {
+    const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    acc[camelKey] = obj[key];
+    return acc;
+  }, {});
+}
+
+// ============================================================
 // Admin Middleware
 // ============================================================
+const blacklistedTokens = new Set();
+
+// ============================================================
+// Supabase Database Client
+// ============================================================
+const supabaseUrl = process.env.SUPABASE_URL || 'https://bvbwaicdcshvwefhwbmd.supabase.co';
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
+if (!supabaseKey) {
+  console.error('SUPABASE_SERVICE_KEY environment variable is not set');
+}
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 async function requireAdmin(req, res, next) {
   try {
     const auth = req.headers.authorization;
@@ -126,16 +139,8 @@ async function requireAdmin(req, res, next) {
     if (decoded.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Insufficient permissions' });
     }
-    // Check token blacklist
-    if (decoded.jti) {
-      const { data: blacklisted } = await supabase
-        .from('token_blacklist')
-        .select('id')
-        .eq('token_jti', decoded.jti)
-        .maybeSingle();
-      if (blacklisted) {
-        return res.status(401).json({ success: false, message: 'Token revoked' });
-      }
+    if (decoded.jti && blacklistedTokens.has(decoded.jti)) {
+      return res.status(401).json({ success: false, message: 'Token revoked' });
     }
     req.admin = decoded;
     next();
@@ -148,27 +153,13 @@ async function requireAdmin(req, res, next) {
 }
 
 // ============================================================
-// Audit Logging
-// ============================================================
-async function logAudit(adminUser, action, details, ip) {
-  try {
-    await supabase.from('admin_audit_log').insert({
-      admin_user: adminUser,
-      action,
-      details: typeof details === 'string' ? details : JSON.stringify(details),
-      ip_address: ip || '',
-    });
-  } catch {
-    // Audit log failure should not break the request
-  }
-}
-
-// ============================================================
 // PayPal Auth Helper
 // ============================================================
 async function getPayPalAccessToken() {
   const https = require('https');
-  const auth = Buffer.from(`${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`).toString('base64');
+  const clientId = process.env.PAYPAL_CLIENT_ID || 'AW0W0rZ1vipKWQzIATsva00HNuSwtHzplMu0a85MqF0ekbQjcwxGhuTE3AYjUKUNe7MDZibJprQbta-t';
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET || 'EERcWPn5avjEAteRNvjLIolrxLrV7YaX6hnAl4yJnozJuOQVVBHZyHgjdpHxEIPI_nSPj0gt2ra2Lier';
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   return new Promise((resolve, reject) => {
     const req = https.request(`${process.env.PAYPAL_API_BASE || 'https://api-m.paypal.com'}/v1/oauth2/token`, {
       method: 'POST',
@@ -198,7 +189,12 @@ app.get('/api/health', (_req, res) => {
   res.json({ success: true, message: 'API is running', timestamp: new Date().toISOString() });
 });
 
-// --- Create PayPal Order ---
+function getBaseUrl(req) {
+  const host = req.headers.host || 'iptvpro-eight.vercel.app';
+  return `https://${host}`;
+}
+
+// --- Create PayPal Order (redirect flow) ---
 app.post('/api/payment/create-order', standardLimiter, async (req, res) => {
   try {
     const { planId, email } = req.body;
@@ -221,6 +217,8 @@ app.post('/api/payment/create-order', standardLimiter, async (req, res) => {
     }
 
     const accessToken = await getPayPalAccessToken();
+    const baseUrl = getBaseUrl(req);
+    const customId = `${planId}|${email}`;
 
     const https = require('https');
     const order = await new Promise((resolve, reject) => {
@@ -241,13 +239,24 @@ app.post('/api/payment/create-order', standardLimiter, async (req, res) => {
       req.on('error', () => reject(new Error('Unable to create payment order')));
       req.write(JSON.stringify({
         intent: 'CAPTURE',
-        purchase_units: [{ amount: { currency_code: 'USD', value: plan.price }, description: `IPTV Premium - ${plan.name}` }],
+        purchase_units: [{
+          amount: { currency_code: 'USD', value: plan.price },
+          description: `IPTV Premium - ${plan.name}`,
+          custom_id: customId,
+        }],
+        application_context: {
+          return_url: `${baseUrl}/api/payment/return`,
+          cancel_url: `${baseUrl}/pricing`,
+          user_action: 'PAY_NOW',
+          brand_name: 'IPTV Premium',
+        },
       }));
       req.end();
     });
 
     if (order.id) {
-      res.json({ success: true, data: { orderID: order.id } });
+      const approveLink = order.links?.find(l => l.rel === 'approve')?.href || '';
+      res.json({ success: true, data: { orderID: order.id, approvalUrl: approveLink } });
     } else {
       res.status(400).json({ success: false, message: 'Unable to create payment order' });
     }
@@ -296,31 +305,120 @@ app.post('/api/payment/capture-order', standardLimiter, async (req, res) => {
 
     if (capture.status === 'COMPLETED') {
       const captureId = capture.purchase_units?.[0]?.payments?.captures?.[0]?.id || '';
-      const pname = ({ month1: '1 Month', month6: '6 Months', year1: '1 Year' })[planId] || planId;
-      const amount = capture.purchase_units?.[0]?.payments?.captures?.[0]?.amount?.value || '';
-
-      const { error: insertError } = await supabase
-        .from('payments')
-        .insert({
-          paypal_order_id: orderId,
-          customer_email: email,
-          plan_id: planId,
-          plan_name: pname,
-          amount,
-          paypal_capture_id: captureId,
-          status: 'COMPLETED',
-        });
-
-      if (insertError) {
-        return res.status(500).json({ success: false, message: 'Payment confirmed but failed to save. Please contact support.' });
-      }
-
+      const plans = { month1: { price: '9.99', name: '1 Month' }, month6: { price: '29.99', name: '6 Months' }, year1: { price: '49.99', name: '1 Year' } };
+      const plan = plans[planId] || { price: '0', name: 'Unknown' };
+      const { error: insertError } = await supabase.from('orders').insert({
+        order_id: orderId,
+        capture_id: captureId,
+        email,
+        plan_id: planId,
+        plan_name: plan.name,
+        amount: plan.price,
+        currency: 'USD',
+        status: 'paid',
+        delivered: false,
+      });
+      if (insertError) throw new Error('Failed to save order');
       res.json({ success: true, data: { captureId, status: capture.status } });
     } else {
       res.status(400).json({ success: false, message: 'Payment was not completed. Please try again.' });
     }
   } catch (err) {
     res.status(500).json({ success: false, message: 'An error occurred while processing your payment. Please try again.' });
+  }
+});
+
+// --- PayPal Return (redirect after approval) ---
+app.get('/api/payment/return', async (req, res) => {
+  try {
+    const token = req.query.token;
+    if (!token || typeof token !== 'string') {
+      return res.redirect('/pricing?error=missing_token');
+    }
+
+    const accessToken = await getPayPalAccessToken();
+    const baseUrl = getBaseUrl(req);
+    const https = require('https');
+
+    // Capture the order
+    const capture = await new Promise((resolve, reject) => {
+      const req = https.request(`${process.env.PAYPAL_API_BASE || 'https://api-m.paypal.com'}/v2/checkout/orders/${encodeURIComponent(token)}/capture`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => data += chunk);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (res.statusCode >= 400) reject(new Error('Payment capture failed'));
+            else resolve(parsed);
+          } catch { reject(new Error('Payment capture failed')); }
+        });
+      });
+      req.on('error', () => reject(new Error('Payment capture failed')));
+      req.write('{}');
+      req.end();
+    });
+
+    if (capture.status !== 'COMPLETED') {
+      return res.redirect(`${baseUrl}/pricing?error=payment_failed`);
+    }
+
+    // Get custom_id from order to find planId/email
+    let planId = 'month1';
+    let email = '';
+
+    try {
+      const orderDetails = await new Promise((resolve, reject) => {
+        const req = https.request(`${process.env.PAYPAL_API_BASE || 'https://api-m.paypal.com'}/v2/checkout/orders/${encodeURIComponent(token)}`, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        }, (res) => {
+          let data = '';
+          res.on('data', (chunk) => data += chunk);
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(data);
+              if (res.statusCode >= 400) reject(new Error('Could not fetch order'));
+              else resolve(parsed);
+            } catch { reject(new Error('Could not fetch order')); }
+          });
+        });
+        req.on('error', () => reject(new Error('Could not fetch order')));
+        req.end();
+      });
+
+      const customId = orderDetails.purchase_units?.[0]?.custom_id;
+      if (customId) {
+        const parts = customId.split('|');
+        planId = parts[0] || planId;
+        email = parts[1] || '';
+      }
+    } catch {
+      // Use defaults
+    }
+
+    // Store order in memory
+    const plans = { month1: { price: '9.99', name: '1 Month' }, month6: { price: '29.99', name: '6 Months' }, year1: { price: '49.99', name: '1 Year' } };
+    const plan = plans[planId] || { price: '0', name: 'Unknown' };
+    const { error: insertError } = await supabase.from('orders').insert({
+      order_id: token,
+      capture_id: capture.id || '',
+      email,
+      plan_id: planId,
+      plan_name: plan.name,
+      amount: plan.price,
+      currency: 'USD',
+      status: 'paid',
+      delivered: false,
+    });
+    if (insertError) console.error('Failed to save order from return URL:', insertError);
+
+    res.redirect(`${baseUrl}/success?orderId=${encodeURIComponent(token)}&plan=${encodeURIComponent(planId)}&email=${encodeURIComponent(email)}`);
+  } catch (err) {
+    const baseUrl = getBaseUrl(req);
+    res.redirect(`${baseUrl}/pricing?error=payment_error`);
   }
 });
 
@@ -333,15 +431,14 @@ app.post('/api/payment/free-trial', standardLimiter, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please enter a valid email address' });
     }
 
-    const { error: insertError } = await supabase
-      .from('trial_requests')
-      .insert({ customer_email: email, status: 'pending' });
+    const { error: insertError } = await supabase.from('trials').insert({
+      email,
+      status: 'active',
+      delivered: false,
+    });
+    if (insertError) throw new Error('Failed to save trial');
 
-    if (insertError && !insertError.message?.includes('duplicate key')) {
-      return res.status(500).json({ success: false, message: 'Failed to submit trial request. Please try again.' });
-    }
-
-    res.json({ success: true, message: 'Free trial requested. Check your email for instructions.' });
+    res.json({ success: true, message: 'Free trial activated! Check your email for instructions.' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'An error occurred. Please try again later.' });
   }
@@ -359,13 +456,12 @@ app.post('/api/email/contact', standardLimiter, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Message must be under 5000 characters' });
     }
 
-    const { error: insertError } = await supabase
-      .from('contacts')
-      .insert({ email, message });
-
-    if (insertError) {
-      return res.status(500).json({ success: false, message: 'Failed to send message. Please try again.' });
-    }
+    const { error: insertError } = await supabase.from('contacts').insert({
+      email,
+      message,
+      read: false,
+    });
+    if (insertError) throw new Error('Failed to save message');
 
     res.json({ success: true, message: 'Message sent successfully' });
   } catch (err) {
@@ -384,7 +480,6 @@ app.post('/api/admin/login', strictLimiter, async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Timing-safe comparison
     const userMatch = username.length === adminUser.length && username === adminUser;
     const passMatch = password.length === adminPass.length && password === adminPass;
 
@@ -394,15 +489,13 @@ app.post('/api/admin/login', strictLimiter, async (req, res) => {
 
     const token = signAdminToken(username);
 
-    await logAudit(username, 'LOGIN', 'Admin login successful', req.ip);
-
     res.json({ success: true, data: { token } });
   } catch (err) {
     res.status(500).json({ success: false, message: 'An error occurred during login' });
   }
 });
 
-// --- Admin Logout (revoke token) ---
+// --- Admin Logout ---
 app.post('/api/admin/logout', async (req, res) => {
   try {
     const auth = req.headers.authorization;
@@ -417,14 +510,9 @@ app.post('/api/admin/logout', async (req, res) => {
       return res.json({ success: true, message: 'Logged out' });
     }
 
-    if (decoded.jti && decoded.exp) {
-      await supabase.from('token_blacklist').insert({
-        token_jti: decoded.jti,
-        expires_at: new Date(decoded.exp * 1000).toISOString(),
-      }).catch(() => {});
+    if (decoded.jti) {
+      blacklistedTokens.add(decoded.jti);
     }
-
-    await logAudit(decoded.username || 'admin', 'LOGOUT', 'Admin logout', req.ip);
 
     res.json({ success: true, message: 'Logged out' });
   } catch {
@@ -435,58 +523,66 @@ app.post('/api/admin/logout', async (req, res) => {
 // --- Admin: Get Orders ---
 app.get('/api/admin/orders', requireAdmin, async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('payments')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      return res.status(500).json({ success: false, message: 'Failed to fetch orders' });
-    }
-
-    await logAudit(req.admin.username, 'VIEW_ORDERS', 'Viewed payments list', req.ip);
-    res.json({ success: true, data });
-  } catch {
-    res.status(500).json({ success: false, message: 'Failed to fetch orders' });
+    const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, data: snakeToCamel(data) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error fetching orders' });
   }
 });
 
 // --- Admin: Get Trials ---
 app.get('/api/admin/trials', requireAdmin, async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('trial_requests')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      return res.status(500).json({ success: false, message: 'Failed to fetch trials' });
-    }
-
-    await logAudit(req.admin.username, 'VIEW_TRIALS', 'Viewed trials list', req.ip);
-    res.json({ success: true, data });
-  } catch {
-    res.status(500).json({ success: false, message: 'Failed to fetch trials' });
+    const { data, error } = await supabase.from('trials').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, data: snakeToCamel(data) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error fetching trials' });
   }
 });
 
 // --- Admin: Get Contacts ---
 app.get('/api/admin/contacts', requireAdmin, async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('contacts')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      return res.status(500).json({ success: false, message: 'Failed to fetch messages' });
-    }
-
-    await logAudit(req.admin.username, 'VIEW_CONTACTS', 'Viewed contacts list', req.ip);
-    res.json({ success: true, data });
-  } catch {
-    res.status(500).json({ success: false, message: 'Failed to fetch messages' });
+    const { data, error } = await supabase.from('contacts').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, data: snakeToCamel(data) });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error fetching messages' });
   }
+});
+
+// --- Admin: Update Order Delivery Status ---
+app.patch('/api/admin/orders/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { delivered } = req.body;
+    const { data, error } = await supabase.from('orders').update({ delivered: !!delivered }).eq('id', id).select().single();
+    if (error) return res.status(404).json({ success: false, message: 'Order not found' });
+    res.json({ success: true, data: snakeToCamel(data) });
+  } catch {
+    res.status(500).json({ success: false, message: 'Error updating order' });
+  }
+});
+
+// --- Admin: Update Trial Delivery Status ---
+app.patch('/api/admin/trials/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { delivered } = req.body;
+    const { data, error } = await supabase.from('trials').update({ delivered: !!delivered }).eq('id', id).select().single();
+    if (error) return res.status(404).json({ success: false, message: 'Trial not found' });
+    res.json({ success: true, data: snakeToCamel(data) });
+  } catch {
+    res.status(500).json({ success: false, message: 'Error updating trial' });
+  }
+});
+
+// Catch-all error handler
+app.use((err, _req, res, _next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
 module.exports = app;

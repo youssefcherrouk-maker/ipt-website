@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { PayPalButtons } from '@paypal/react-paypal-js';
+import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
-import { PLANS, createPayPalOrder, capturePayPalOrder, submitFreeTrial } from '@/utils/api';
+import { PLANS, submitFreeTrial, createPayPalOrder } from '@/utils/api';
 import type { Plan } from '@/utils/api';
 
 function PlanCard({
@@ -16,10 +15,8 @@ function PlanCard({
   const [email, setEmail] = useState('');
   const emailRef = useRef('');
   const [emailError, setEmailError] = useState('');
-  const [showPayPal, setShowPayPal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success'>('idle');
-  const [orderId, setOrderId] = useState<string | null>(null);
 
   const validateEmail = (val: string) => {
     if (!val.trim()) {
@@ -33,9 +30,6 @@ function PlanCard({
     setEmailError('');
     return true;
   };
-
-  const generateIdempotencyKey = () =>
-    `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${plan.id}`;
 
   const handleFreeTrial = async () => {
     if (!validateEmail(email)) return;
@@ -52,35 +46,17 @@ function PlanCard({
     }
   };
 
-  const handleBuyClick = () => {
+  const handleBuyClick = async () => {
     if (!validateEmail(email)) return;
-    setShowPayPal(true);
-  };
-
-  const handleApprove = useCallback(async (data: { orderID: string }) => {
-    const curEmail = emailRef.current;
     setLoading(true);
-    const result = await capturePayPalOrder(data.orderID, plan.id, curEmail);
+    const result = await createPayPalOrder(plan.id, emailRef.current);
     setLoading(false);
-    if (result.success) {
-      setOrderId(data.orderID);
-      setStatus('success');
-      setTimeout(() => {
-        window.location.href = `/success?orderId=${data.orderID}&plan=${plan.id}&email=${encodeURIComponent(curEmail)}`;
-      }, 1500);
+    if (result.success && result.data?.approvalUrl) {
+      window.location.href = result.data.approvalUrl;
     } else {
-      alert('Payment capture failed. Please contact support.');
+      alert(result.message || 'Failed to create payment. Please try again.');
     }
-  }, [plan.id]);
-
-  const handleCreateOrder = useCallback(async () => {
-    const key = generateIdempotencyKey();
-    const result = await createPayPalOrder(plan.id, emailRef.current, key);
-    if (result.success && result.data?.orderID) {
-      return result.data.orderID;
-    }
-    throw new Error(result.message || 'Failed to create PayPal order');
-  }, [plan.id]);
+  };
 
   if (status === 'success') {
     return (
@@ -156,7 +132,7 @@ function PlanCard({
         {emailError && <p className="text-red-400 text-xs mt-1">{emailError}</p>}
       </div>
 
-      {/* CTA / PayPal Button */}
+      {/* CTA Button */}
       {plan.id === 'free' ? (
         <button
           onClick={handleFreeTrial}
@@ -165,7 +141,7 @@ function PlanCard({
         >
           {loading ? t.pricing.processing : plan.trans.cta}
         </button>
-      ) : !showPayPal ? (
+      ) : (
         <button
           onClick={handleBuyClick}
           disabled={loading}
@@ -173,18 +149,6 @@ function PlanCard({
         >
           {loading ? t.pricing.processing : plan.trans.cta}
         </button>
-      ) : (
-        <div className="min-h-[150px]">
-          <PayPalButtons
-            style={{ layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' }}
-            createOrder={handleCreateOrder}
-            onApprove={handleApprove}
-            onError={(err) => {
-              console.error('PayPal Error:', err);
-              alert('PayPal Error: ' + (err?.message || err || 'Payment failed'));
-            }}
-          />
-        </div>
       )}
     </div>
   );

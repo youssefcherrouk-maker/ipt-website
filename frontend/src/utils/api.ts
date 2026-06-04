@@ -1,5 +1,7 @@
-// API calls are proxied through Cloudflare Worker to avoid exposing Vercel bypass token
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+function getApiUrl() {
+  if (typeof window !== 'undefined') return window.location.origin + '/api';
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+}
 const BYPASS_PARAM = '';
 
 interface ApiResponse<T = unknown> {
@@ -12,7 +14,7 @@ async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  const url = `${API_URL}${endpoint}${BYPASS_PARAM}`;
+  const url = `${getApiUrl()}${endpoint}${BYPASS_PARAM}`;
 
   const config: RequestInit = {
     ...options,
@@ -46,7 +48,7 @@ export async function createPayPalOrder(
   planId: string,
   email: string,
   idempotencyKey?: string
-): Promise<ApiResponse<{ orderID: string }>> {
+): Promise<ApiResponse<{ orderID: string; approvalUrl: string }>> {
   return request('/payment/create-order', {
     method: 'POST',
     body: JSON.stringify({ planId, email, idempotencyKey }),
@@ -91,14 +93,14 @@ export async function adminLogin(username: string, password: string): Promise<Ap
 }
 
 export async function adminLogout(token: string): Promise<ApiResponse> {
-  return fetch(`${API_URL}/admin/logout${BYPASS_PARAM}`, {
+  return fetch(`${getApiUrl()}/admin/logout${BYPASS_PARAM}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   }).then(r => r.json());
 }
 
 export async function adminGetTrials(token: string): Promise<ApiResponse<any[]>> {
-  const res = await fetch(`${API_URL}/admin/trials${BYPASS_PARAM}`, {
+  const res = await fetch(`${getApiUrl()}/admin/trials${BYPASS_PARAM}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
@@ -107,7 +109,7 @@ export async function adminGetTrials(token: string): Promise<ApiResponse<any[]>>
 }
 
 export async function adminGetOrders(token: string): Promise<ApiResponse<any[]>> {
-  const res = await fetch(`${API_URL}/admin/orders${BYPASS_PARAM}`, {
+  const res = await fetch(`${getApiUrl()}/admin/orders${BYPASS_PARAM}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
@@ -116,11 +118,33 @@ export async function adminGetOrders(token: string): Promise<ApiResponse<any[]>>
 }
 
 export async function adminGetContacts(token: string): Promise<ApiResponse<any[]>> {
-  const res = await fetch(`${API_URL}/admin/contacts${BYPASS_PARAM}`, {
+  const res = await fetch(`${getApiUrl()}/admin/contacts${BYPASS_PARAM}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
   if (!res.ok) return { success: false, message: data.message || 'Failed to fetch contacts' };
+  return { success: true, data: data.data };
+}
+
+export async function adminUpdateOrderStatus(token: string, id: number, delivered: boolean): Promise<ApiResponse<any>> {
+  const res = await fetch(`${getApiUrl()}/admin/orders/${id}${BYPASS_PARAM}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ delivered }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { success: false, message: data.message || 'Failed to update order' };
+  return { success: true, data: data.data };
+}
+
+export async function adminUpdateTrialStatus(token: string, id: number, delivered: boolean): Promise<ApiResponse<any>> {
+  const res = await fetch(`${getApiUrl()}/admin/trials/${id}${BYPASS_PARAM}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ delivered }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { success: false, message: data.message || 'Failed to update trial' };
   return { success: true, data: data.data };
 }
 

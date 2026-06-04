@@ -3,7 +3,6 @@ import './globals.css';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import PayPalProvider from '@/components/PayPalProvider';
 
 export const metadata: Metadata = {
   title: 'IPTV Premium - Premium IPTV Streaming Service | 20,000+ Channels',
@@ -26,11 +25,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased bg-black text-white">
         <LanguageProvider>
-          <PayPalProvider>
-            <Navbar />
+          <Navbar />
             <main className="min-h-screen">{children}</main>
             <Footer />
-          </PayPalProvider>
         </LanguageProvider>
       </body>
     </html>
